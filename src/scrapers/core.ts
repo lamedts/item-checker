@@ -29,6 +29,38 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
     });
 }
 
+/**
+ * Safely close the browser with a timeout.
+ * On ARM64 Linux, browser.close() can hang indefinitely.
+ * We close all contexts first, then try browser.close() with a 10s timeout.
+ * If it still hangs, we log and move on (the outer per-scraper timeout in runJob is the safety net).
+ */
+export async function closeBrowser(browser: Browser, label: string): Promise<void> {
+    try {
+        // Close all contexts first — this often helps the browser shut down cleanly
+        for (const context of browser.contexts()) {
+            await Promise.race([
+                context.close(),
+                new Promise(r => setTimeout(r, 5_000))
+            ]);
+        }
+
+        // Now try to close the browser itself
+        await Promise.race([
+            browser.close(),
+            new Promise<void>((resolve) => {
+                setTimeout(() => {
+                    console.warn(`[${label}] browser.close() timed out after 10s, abandoning.`);
+                    resolve();
+                }, 10_000);
+            })
+        ]);
+        console.log(`[${label}] Browser closed.`);
+    } catch (err) {
+        console.warn(`[${label}] browser.close() failed:`, err);
+    }
+}
+
 export async function setupBrowser(): Promise<{ browser: Browser, page: Page }> {
     // Always run headless for a VPS
     const browser = await chromium.launch({
@@ -54,3 +86,4 @@ export async function setupBrowser(): Promise<{ browser: Browser, page: Page }> 
     const page = await context.newPage();
     return { browser, page };
 }
+

@@ -1,4 +1,4 @@
-import { setupBrowser, withTimeout, type Scraper } from './core';
+import { setupBrowser, closeBrowser, withTimeout, type Scraper } from './core';
 import { type Listing } from '../db';
 import { toAbsoluteDate } from '../utils';
 import { MIN_PRICE, MAX_PRICE } from '../index';
@@ -118,8 +118,7 @@ export class DCFeverScraper implements Scraper {
             console.error(`[DCFever] Scraping failed:`, error);
         } finally {
             console.log(`[DCFever] Closing browser...`);
-            await browser.close();
-            console.log(`[DCFever] Browser closed.`);
+            await closeBrowser(browser, 'DCFever');
         }
 
         return listings;
