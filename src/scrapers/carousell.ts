@@ -1,13 +1,21 @@
-import { setupBrowser, type Scraper } from './core';
+import { setupBrowser, withTimeout, type Scraper } from './core';
 import { type Listing } from '../db';
 import { toAbsoluteDate } from '../utils';
 import { MIN_PRICE, MAX_PRICE } from '../index';
 import * as fs from 'fs';
 
+const SCRAPER_TIMEOUT_MS = 90_000; // 90 seconds max for entire scrape
+
 export class CarousellScraper implements Scraper {
     name = 'Carousell';
 
     async search(keyword: string): Promise<Listing[]> {
+        // Wrap entire search in a timeout so it never hangs indefinitely
+        return withTimeout(this._doSearch(keyword), SCRAPER_TIMEOUT_MS, 'Carousell search');
+    }
+
+    private async _doSearch(keyword: string): Promise<Listing[]> {
+        console.log(`[Carousell] Launching browser...`);
         const { browser, page } = await setupBrowser();
         const listings: Listing[] = [];
 
@@ -20,6 +28,7 @@ export class CarousellScraper implements Scraper {
 
             // Sometimes Carousell shows a location or language modal. Stealth handles most Cloudflare stuff.
             await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+            console.log(`[Carousell] Page loaded (domcontentloaded).`);
 
             // Wait to see if we hit a captcha or if the container loaded.
             // We wait for either a listing item to exist or for the page to settle.
@@ -27,7 +36,9 @@ export class CarousellScraper implements Scraper {
 
             // Extract listing cards. Carousell's DOM changes often, but typically listings are in `div[data-testid^="listing-card-"]`
             // We'll search for anchor tags that link to listings
+            console.log(`[Carousell] Extracting listing elements...`);
             const items = await page.$$('a[href^="/p/"]');
+            console.log(`[Carousell] Found ${items.length} raw elements to parse.`);
 
             for (const item of items) {
                 try {
@@ -115,14 +126,22 @@ export class CarousellScraper implements Scraper {
             // Dump HTML if we found 0 items, might be blocked
             if (listings.length === 0) {
                 console.log(`[Carousell] No items found. We might be blocked or the selector changed.`);
-                const html = await page.content();
-                fs.writeFileSync('carousell_debug.html', html);
+                try {
+                    const html = await page.content();
+                    fs.writeFileSync('carousell_debug.html', html);
+                    await page.screenshot({ path: 'carousell_debug.png', fullPage: true });
+                    console.log(`[Carousell] Debug HTML and screenshot saved.`);
+                } catch (debugErr) {
+                    console.error(`[Carousell] Failed to save debug info:`, debugErr);
+                }
             }
 
         } catch (error) {
             console.error(`[Carousell] Scraping failed:`, error);
         } finally {
+            console.log(`[Carousell] Closing browser...`);
             await browser.close();
+            console.log(`[Carousell] Browser closed.`);
         }
 
         return listings;

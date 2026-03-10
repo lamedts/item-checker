@@ -14,6 +14,21 @@ export interface Scraper {
     search(keyword: string): Promise<Listing[]>;
 }
 
+/**
+ * Wraps a promise with a timeout. Rejects if the promise doesn't resolve within `ms` milliseconds.
+ */
+export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error(`[Timeout] ${label} did not complete within ${ms / 1000}s`));
+        }, ms);
+
+        promise
+            .then((val) => { clearTimeout(timer); resolve(val); })
+            .catch((err) => { clearTimeout(timer); reject(err); });
+    });
+}
+
 export async function setupBrowser(): Promise<{ browser: Browser, page: Page }> {
     // Always run headless for a VPS
     const browser = await chromium.launch({
@@ -25,7 +40,8 @@ export async function setupBrowser(): Promise<{ browser: Browser, page: Page }> 
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--disable-gpu'
+            '--disable-gpu',
+            '--single-process'
         ]
     });
 

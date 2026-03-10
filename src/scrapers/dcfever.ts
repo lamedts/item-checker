@@ -1,12 +1,20 @@
-import { setupBrowser, type Scraper } from './core';
+import { setupBrowser, withTimeout, type Scraper } from './core';
 import { type Listing } from '../db';
 import { toAbsoluteDate } from '../utils';
 import { MIN_PRICE, MAX_PRICE } from '../index';
+
+const SCRAPER_TIMEOUT_MS = 90_000; // 90 seconds max for entire scrape
 
 export class DCFeverScraper implements Scraper {
     name = 'DCFever';
 
     async search(keyword: string): Promise<Listing[]> {
+        // Wrap entire search in a timeout so it never hangs indefinitely
+        return withTimeout(this._doSearch(keyword), SCRAPER_TIMEOUT_MS, 'DCFever search');
+    }
+
+    private async _doSearch(keyword: string): Promise<Listing[]> {
+        console.log(`[DCFever] Launching browser...`);
         const { browser, page } = await setupBrowser();
         const listings: Listing[] = [];
 
@@ -17,12 +25,18 @@ export class DCFeverScraper implements Scraper {
 
             console.log(`[DCFever] Navigating to ${searchUrl}`);
             await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            console.log(`[DCFever] Page loaded (domcontentloaded).`);
 
             // Wait for at least one listing item or the "no results" element
-            await page.waitForSelector('.item_listing, .search_result_heading', { timeout: 15000 }).catch(() => null);
+            console.log(`[DCFever] Waiting for selectors...`);
+            await page.waitForSelector('.item_listing, .search_result_heading', { timeout: 15000 }).catch(() => {
+                console.log(`[DCFever] Selector wait timed out (15s), proceeding anyway.`);
+            });
 
             // Extract the listings
+            console.log(`[DCFever] Extracting listing elements...`);
             const items = await page.$$('.col-xs-6.col-md-3 a');
+            console.log(`[DCFever] Found ${items.length} raw elements to parse.`);
 
             for (const item of items) {
                 try {
@@ -87,16 +101,25 @@ export class DCFeverScraper implements Scraper {
 
             console.log(`[DCFever] Found ${listings.length} items.`);
 
-            // Dump HTML if we found 0 items, might be blocked or selector changed
+            // Dump HTML + screenshot if we found 0 items, might be blocked or selector changed
             if (listings.length === 0) {
-                console.log(`[DCFever] No items found. Dumping HTML...`);
-                const html = await page.content();
-                import('fs').then(fs => fs.writeFileSync('dcfever_debug.html', html));
+                console.log(`[DCFever] No items found. Dumping debug info...`);
+                try {
+                    const html = await page.content();
+                    const fs = await import('fs');
+                    fs.writeFileSync('dcfever_debug.html', html);
+                    await page.screenshot({ path: 'dcfever_debug.png', fullPage: true });
+                    console.log(`[DCFever] Debug HTML and screenshot saved.`);
+                } catch (debugErr) {
+                    console.error(`[DCFever] Failed to save debug info:`, debugErr);
+                }
             }
         } catch (error) {
             console.error(`[DCFever] Scraping failed:`, error);
         } finally {
+            console.log(`[DCFever] Closing browser...`);
             await browser.close();
+            console.log(`[DCFever] Browser closed.`);
         }
 
         return listings;
