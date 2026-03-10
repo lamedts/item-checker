@@ -8,7 +8,7 @@ chromium.use(stealth());
 
 /**
  * Interface that each scraper class will implement.
- * Scrapers receive a Page (tab) instead of managing their own browser.
+ * Scrapers receive a Page (tab) and reuse it.
  */
 export interface Scraper {
     name: string;
@@ -31,9 +31,10 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
 }
 
 /**
- * Launch a shared browser instance. Called once per job run.
+ * Launch a browser and return both the browser and a ready-to-use page.
+ * The same page should be reused across all scrapers in a single job.
  */
-export async function launchBrowser(): Promise<Browser> {
+export async function setupBrowser(): Promise<{ browser: Browser, page: Page }> {
     const browser = await chromium.launch({
         headless: true,
         args: [
@@ -43,23 +44,18 @@ export async function launchBrowser(): Promise<Browser> {
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
-            '--disable-gpu',
-            '--single-process'
+            '--disable-gpu'
         ]
     });
-    return browser;
-}
 
-/**
- * Create a new page (tab) in the given browser with standard settings.
- */
-export async function createPage(browser: Browser): Promise<Page> {
     const context = await browser.newContext({
         userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         viewport: { width: 1280, height: 720 },
         locale: 'en-US,en;q=0.9',
     });
-    return await context.newPage();
+
+    const page = await context.newPage();
+    return { browser, page };
 }
 
 /**
@@ -68,15 +64,6 @@ export async function createPage(browser: Browser): Promise<Page> {
  */
 export async function closeBrowser(browser: Browser, label: string): Promise<void> {
     try {
-        // Close all contexts first — helps the browser shut down cleanly
-        for (const context of browser.contexts()) {
-            await Promise.race([
-                context.close(),
-                new Promise(r => setTimeout(r, 5_000))
-            ]);
-        }
-
-        // Now try to close the browser itself
         await Promise.race([
             browser.close(),
             new Promise<void>((resolve) => {
