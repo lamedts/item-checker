@@ -18,7 +18,7 @@ export function isOlderThanDays(postedAt: string | undefined, daysLimit: number)
 /**
  * Converts a relative date string (e.g. "362 日前", "5 days ago") to an absolute YYYY-MM-DD date string.
  */
-export function toAbsoluteDate(postDate?: string): string | undefined {
+export function toAbsoluteDate(postDate?: string): { absolute: string, relative: string } | undefined {
     if (!postDate) return undefined;
 
     const lowerDate = postDate.toLowerCase();
@@ -52,5 +52,10 @@ export function toAbsoluteDate(postDate?: string): string | undefined {
 
     // Return true ISO string for timezone-aware processing
     const targetDate = new Date(Date.now() - millisToSubtract);
-    return targetDate.toISOString();
+    const englishRelative = `${amount} ${englishUnit} ago`;
+
+    return {
+        absolute: targetDate.toISOString(),
+        relative: englishRelative
+    };
 }

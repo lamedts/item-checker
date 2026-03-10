@@ -23,7 +23,10 @@ export interface Listing {
   title: string;
   price: string;
   url: string;
-  postedAt?: string;
+  postedAt?: {
+    absolute: string;
+    relative: string;
+  };
 }
 
 /**
@@ -50,7 +53,7 @@ export function addListing(listing: Listing): void {
     listing.title,
     listing.price,
     listing.url,
-    listing.postedAt || null
+    listing.postedAt ? listing.postedAt.absolute : null
   );
 }
 

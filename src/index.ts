@@ -35,13 +35,41 @@ const scrapers = [
  * Sends a formatted message to Telegram
  */
 async function sendNotification(listing: Listing) {
+    let dateStr = '';
+    if (listing.postedAt) {
+        // Parse the ISO string to format appropriately in HKT timezone
+        const dateObj = new Date(listing.postedAt.absolute);
+
+        const options: Intl.DateTimeFormatOptions = {
+            timeZone: 'Asia/Hong_Kong',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        };
+
+        const formatter = new Intl.DateTimeFormat('en-US', options);
+        const parts = formatter.formatToParts(dateObj);
+        const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00';
+
+        const year = getPart('year');
+        const month = getPart('month');
+        const day = getPart('day');
+        const hour = parseInt(getPart('hour'), 10) === 24 ? '00' : getPart('hour'); // handle 24:00
+        const minute = getPart('minute');
+
+        const absoluteStr = `${year}-${month}-${day} ${hour}:${minute}`;
+        dateStr = `*Posted:* ${absoluteStr} (${listing.postedAt.relative})\n`;
+    }
+
     const message = `
 🚨 *New ${SEARCH_KEYWORD} Listing - ${listing.platform}* 🚨
 
 *Title:* ${listing.title}
 *Price:* ${listing.price}
-${listing.postedAt ? `*Posted:* ${listing.postedAt}\n` : ''}
-[View Listing](${listing.url})
+${dateStr}[View Listing](${listing.url})
   `;
 
     try {
@@ -67,7 +95,7 @@ async function runJob() {
             for (const listing of results) {
                 if (!isListingSeen(listing.id)) {
                     // Check if it's older than user-configured limit
-                    if (!isOlderThanDays(listing.postedAt, maxAgeDays)) {
+                    if (!isOlderThanDays(listing.postedAt?.absolute, maxAgeDays)) {
                         // This is a new listing and not too old
                         await sendNotification(listing);
                         newCount++;
@@ -75,7 +103,7 @@ async function runJob() {
                         // Slight delay between messages to avoid rate limiting
                         await new Promise(r => setTimeout(r, 1000));
                     } else {
-                        console.log(`[!] Skipping notification for ${listing.id} (Older than ${maxAgeDays} days: ${listing.postedAt})`);
+                        console.log(`[!] Skipping notification for ${listing.id} (Older than ${maxAgeDays} days: ${listing.postedAt?.absolute})`);
                     }
 
                     // Always add to DB so we don't process it again (even if we skipped notification)
