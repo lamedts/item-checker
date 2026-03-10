@@ -1,5 +1,4 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { CronJob } from 'cron';
 import { addListing, isListingSeen, type Listing } from './db';
 import { CarousellScraper } from './scrapers/carousell';
 import { DCFeverScraper } from './scrapers/dcfever';
@@ -7,8 +6,10 @@ import { isOlderThanDays } from './utils';
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const chatIdStr = process.env.TELEGRAM_CHAT_ID;
-const scanIntervalStr = process.env.SCAN_INTERVAL_MINUTES || '15';
-const scanInterval = parseInt(scanIntervalStr, 10) || 15;
+const scanIntervalMinStr = process.env.SCAN_INTERVAL_MIN_MINUTES || process.env.SCAN_INTERVAL_MINUTES || '10';
+const scanIntervalMin = parseInt(scanIntervalMinStr, 10) || 10;
+const scanIntervalMaxStr = process.env.SCAN_INTERVAL_MAX_MINUTES || process.env.SCAN_INTERVAL_MINUTES || '20';
+const scanIntervalMax = parseInt(scanIntervalMaxStr, 10) || 20;
 
 // Search configuration
 export const SEARCH_KEYWORD = process.env.SEARCH_KEYWORD || 'mac mini';
@@ -70,6 +71,7 @@ async function sendNotification(listing: Listing) {
 *Title:* ${listing.title}
 *Price:* ${listing.price}
 *ID:* \`${listing.id}\`
+
 ${dateStr}[View Listing](${listing.url})
   `;
 
@@ -86,7 +88,7 @@ ${dateStr}[View Listing](${listing.url})
  */
 async function runJob() {
     console.log(`\n--- Starting Job at ${new Date().toISOString()} ---`);
-    console.log(`[Config] Keyword: '${SEARCH_KEYWORD}', Price: ${MIN_PRICE}-${MAX_PRICE}, Max Age: ${maxAgeDays} days, Interval: ${scanInterval}m`);
+    console.log(`[Config] Keyword: '${SEARCH_KEYWORD}', Price: ${MIN_PRICE}-${MAX_PRICE}, Max Age: ${maxAgeDays} days, Interval: ${scanIntervalMin}-${scanIntervalMax}m`);
 
     for (const scraper of scrapers) {
         try {
@@ -122,17 +124,35 @@ async function runJob() {
 
 // Ensure first run works immediately
 console.log("Starting Mac Mini Bot...");
-runJob();
 
-// Schedule to run based on env variable
-const cronString = `0 */${scanInterval} * * * *`;
-const job = new CronJob(cronString, runJob);
-job.start();
-console.log(`Cron job scheduled to run every ${scanInterval} minutes (cron: ${cronString}).`);
+let timeoutId: Timer;
+
+async function startLoop() {
+    await runJob();
+    scheduleNextJob();
+}
+
+function scheduleNextJob() {
+    // Ensure actualMax is at least scanIntervalMin
+    const actualMax = Math.max(scanIntervalMin, scanIntervalMax);
+
+    // random interval in minutes between min and actualMax
+    const intervalMins = Math.floor(Math.random() * (actualMax - scanIntervalMin + 1)) + scanIntervalMin;
+    const intervalMs = intervalMins * 60 * 1000;
+
+    const nextDate = new Date(Date.now() + intervalMs);
+    console.log(`[Timer] Next scan scheduled in ${intervalMins} minutes (at ${nextDate.toISOString()}).`);
+
+    timeoutId = setTimeout(() => {
+        startLoop();
+    }, intervalMs);
+}
+
+startLoop();
 
 // Keep process alive if needed
 process.on('SIGINT', () => {
     console.log("Shutting down...");
-    job.stop();
+    if (timeoutId) clearTimeout(timeoutId);
     process.exit(0);
 });
