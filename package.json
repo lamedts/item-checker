@@ -1,0 +1,26 @@
+{
+  "name": "bot",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "truncate": "bun run src/truncate.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/cron": "^2.4.3",
+    "@types/node-telegram-bot-api": "^0.64.14"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "chromium": "^3.0.3",
+    "cron": "^4.4.0",
+    "node-telegram-bot-api": "^0.67.0",
+    "playwright": "^1.58.2",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  }
+}
