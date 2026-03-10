@@ -69,6 +69,7 @@ async function sendNotification(listing: Listing) {
 
 *Title:* ${listing.title}
 *Price:* ${listing.price}
+*ID:* \`${listing.id}\`
 ${dateStr}[View Listing](${listing.url})
   `;
 
