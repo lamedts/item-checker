@@ -1,5 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { addListing, isListingSeen, getListingPrice, updateListingPrice, type Listing } from './db';
+import { CronJob } from 'cron';
+import { addListing, isListingSeen, getListingPrice, updateListingPrice, getListingsCountSince, type Listing } from './db';
 import { CarousellScraper } from './scrapers/carousell';
 import { DCFeverScraper } from './scrapers/dcfever';
 import { setupBrowser, closeBrowser } from './scrapers/core';
@@ -169,8 +170,42 @@ async function runJob() {
     console.log(`--- Job Finished ---`);
 }
 
+/**
+ * Daily health check — summarises listings found in the past 24 hours.
+ */
+async function runHealthCheck() {
+    console.log(`\n--- Health Check at ${new Date().toISOString()} ---`);
+
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const counts = getListingsCountSince(since);
+
+    const total = counts.reduce((sum, row) => sum + row.count, 0);
+    const breakdown = counts.length > 0
+        ? counts.map(r => `  • ${r.platform}: ${r.count}`).join('\n')
+        : '  (none)';
+
+    const message = `
+📊 *Daily Health Check* 📊
+
+*Items found in past 24h:* ${total}
+
+${breakdown}
+  `;
+
+    try {
+        await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+        console.log(`[HealthCheck] Summary sent (${total} items).`);
+    } catch (err) {
+        console.error(`[HealthCheck] Failed to send summary:`, err);
+    }
+}
+
 // Ensure first run works immediately
 console.log("Starting Mac Mini Bot...");
+
+// Schedule daily health check at 23:59 (Asia/Hong_Kong)
+const healthCheckJob = new CronJob('59 23 * * *', runHealthCheck, null, true, 'Asia/Hong_Kong');
+console.log(`[HealthCheck] Scheduled daily at 23:59 (Asia/Hong_Kong).`);
 
 let timeoutId: Timer;
 

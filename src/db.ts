@@ -74,4 +74,17 @@ export function updateListingPrice(id: string, newPrice: string): void {
   statement.run(newPrice, id);
 }
 
+/**
+ * Returns the count of listings per platform created since the given date.
+ */
+export function getListingsCountSince(since: Date): { platform: string; count: number }[] {
+  const statement = db.prepare(`
+        SELECT platform, COUNT(*) as count
+        FROM listings
+        WHERE created_at >= ?
+        GROUP BY platform
+    `);
+  return statement.all(since.toISOString()) as { platform: string; count: number }[];
+}
+
 export default db;
