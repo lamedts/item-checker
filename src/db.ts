@@ -57,4 +57,21 @@ export function addListing(listing: Listing): void {
   );
 }
 
+/**
+ * Returns the stored price for a listing, or null if not found.
+ */
+export function getListingPrice(id: string): string | null {
+  const statement = db.prepare("SELECT price FROM listings WHERE id = ?");
+  const row = statement.get(id) as { price: string } | null;
+  return row ? row.price : null;
+}
+
+/**
+ * Updates the price of an existing listing.
+ */
+export function updateListingPrice(id: string, newPrice: string): void {
+  const statement = db.prepare("UPDATE listings SET price = ? WHERE id = ?");
+  statement.run(newPrice, id);
+}
+
 export default db;

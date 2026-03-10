@@ -1,5 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { addListing, isListingSeen, type Listing } from './db';
+import { addListing, isListingSeen, getListingPrice, updateListingPrice, type Listing } from './db';
 import { CarousellScraper } from './scrapers/carousell';
 import { DCFeverScraper } from './scrapers/dcfever';
 import { setupBrowser, closeBrowser } from './scrapers/core';
@@ -84,6 +84,29 @@ ${dateStr}[View Listing](${listing.url})
 }
 
 /**
+ * Sends a price-change notification to Telegram
+ */
+async function sendPriceChangeNotification(listing: Listing, oldPrice: string) {
+    const message = `
+💰 *Price Changed - ${listing.platform}* 💰
+
+*Title:* ${listing.title}
+*Old Price:* ${oldPrice}
+*New Price:* ${listing.price}
+*ID:* \`${listing.id}\`
+
+[View Listing](${listing.url})
+  `;
+
+    try {
+        await bot.sendMessage(chatId, message, { parse_mode: 'Markdown', disable_web_page_preview: false });
+        console.log(`[Telegram] Sent price change notification for ${listing.id} (${oldPrice} → ${listing.price})`);
+    } catch (err) {
+        console.error(`[Telegram] Failed to send price change message for ${listing.id}:`, err);
+    }
+}
+
+/**
  * Main scraping job — launches ONE browser + page, reuses it for all scrapers, then closes.
  */
 async function runJob() {
@@ -104,6 +127,7 @@ async function runJob() {
                         const results = await scraper.search(SEARCH_KEYWORD, page);
 
                         let newCount = 0;
+                        let priceChangeCount = 0;
                         for (const listing of results) {
                             if (!isListingSeen(listing.id)) {
                                 if (!isOlderThanDays(listing.postedAt?.absolute, maxAgeDays)) {
@@ -114,10 +138,20 @@ async function runJob() {
                                     console.log(`[!] Skipping notification for ${listing.id} (Older than ${maxAgeDays} days: ${listing.postedAt?.absolute})`);
                                 }
                                 addListing(listing);
+                            } else {
+                                // Price change detection
+                                const oldPrice = getListingPrice(listing.id);
+                                if (oldPrice !== null && oldPrice !== listing.price) {
+                                    console.log(`[Price] ${listing.id}: ${oldPrice} → ${listing.price}`);
+                                    await sendPriceChangeNotification(listing, oldPrice);
+                                    updateListingPrice(listing.id, listing.price);
+                                    priceChangeCount++;
+                                    await new Promise(r => setTimeout(r, 1000));
+                                }
                             }
                         }
                         const elapsed = ((Date.now() - scraperStart) / 1000).toFixed(1);
-                        console.log(`[${scraper.name}] Sync complete in ${elapsed}s. Found ${newCount} new items.`);
+                        console.log(`[${scraper.name}] Sync complete in ${elapsed}s. Found ${newCount} new, ${priceChangeCount} price changes.`);
                     })(),
                     new Promise((_, reject) =>
                         setTimeout(() => reject(new Error(`[${scraper.name}] Scraper timed out after 120s`)), 120_000)
