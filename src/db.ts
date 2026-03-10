@@ -12,7 +12,7 @@ db.run(`
     title TEXT NOT NULL,
     price TEXT NOT NULL,
     url TEXT NOT NULL,
-    post_date TEXT,
+    posted_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
 `);
@@ -23,7 +23,7 @@ export interface Listing {
   title: string;
   price: string;
   url: string;
-  postDate?: string;
+  postedAt?: string;
 }
 
 /**
@@ -40,7 +40,7 @@ export function isListingSeen(id: string): boolean {
  */
 export function addListing(listing: Listing): void {
   const statement = db.prepare(`
-    INSERT INTO listings (id, platform, title, price, url, post_date)
+    INSERT OR IGNORE INTO listings (id, platform, title, price, url, posted_at)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
 
@@ -50,7 +50,7 @@ export function addListing(listing: Listing): void {
     listing.title,
     listing.price,
     listing.url,
-    listing.postDate || null
+    listing.postedAt || null
   );
 }
 

@@ -70,14 +70,16 @@ export class DCFeverScraper implements Scraper {
                         }
                     }
 
-                    listings.push({
-                        id,
-                        platform: 'dcfever',
-                        title: title.trim(),
-                        price: price.trim(),
-                        url: href,
-                        postDate: toAbsoluteDate(postDate)
-                    });
+                    if (!listings.find(l => l.id === id)) {
+                        listings.push({
+                            id,
+                            platform: 'dcfever',
+                            title: title.trim(),
+                            price: price.trim(),
+                            url: href,
+                            postedAt: toAbsoluteDate(postDate)
+                        });
+                    }
                 } catch (err) {
                     console.error(`[DCFever] Error parsing an item:`, err);
                 }

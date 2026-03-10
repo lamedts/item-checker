@@ -37,18 +37,23 @@ export class CarousellScraper implements Scraper {
                     // Full URL
                     const urlStr = href.startsWith('http') ? href : `https://www.carousell.com.hk${href}`;
 
-                    // ID is usually at the end of the URL like /p/mac-mini-m2-123456789/
-                    const parts = href.split('-');
-                    let originalId = parts[parts.length - 1];
-                    if (originalId) {
-                        originalId = originalId.replace(/\D/g, ''); // Ensure it's digits
+                    // Clean URL for ID extraction
+                    const cleanHref = (href.split('?')[0] || '').replace(/\/$/, '');
+                    let originalId = '';
+                    // E.g., /p/apple-mac-mini-m4-chip-16gb-256ssd-1425703798/
+                    // Extract the final sequence of digits before the trailing slash or query params
+                    const match = cleanHref.match(/-(\d+)$/);
+                    if (match && match[1]) {
+                        originalId = match[1];
+                    } else {
+                        // Fallback if URL structure is different, just find the longest number
+                        const numbers = cleanHref.match(/\d+/g) || [];
+                        originalId = numbers.sort((a, b) => b.length - a.length)[0] || '';
                     }
 
-                    if (!originalId) continue;
-
-                    const id = `carousell_${originalId}`;
-
-                    // Look inside the parent container for all <p> tags (the date is in a separate sibling anchor tag)
+                    if (!originalId) {
+                        originalId = Buffer.from(cleanHref).toString('base64').replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+                    }                    // Look inside the parent container for all <p> tags (the date is in a separate sibling anchor tag)
                     const container = await item.$('xpath=..');
                     let paragraphs = [];
                     if (container) {
@@ -82,9 +87,12 @@ export class CarousellScraper implements Scraper {
                     if (!title) {
                         const rawText = await item.textContent() || '';
                         // Just grab something descriptive
-                        const lines = rawText.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+                        const lines = rawText.split('\\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0);
                         title = lines[0] || 'Unknown Title';
                     }
+
+                    const safeTitle = (title || '').replace(/[^a-zA-Z0-9]/g, '').substring(0, 12).toLowerCase();
+                    const id = `carousell_${originalId}`;
 
                     if (price && id && !listings.find(l => l.id === id)) {
                         listings.push({
@@ -93,7 +101,7 @@ export class CarousellScraper implements Scraper {
                             title: title.trim(),
                             price: price.trim(),
                             url: urlStr,
-                            postDate: toAbsoluteDate(postDate)
+                            postedAt: toAbsoluteDate(postDate)
                         });
                     }
 

@@ -3,7 +3,7 @@ import { CronJob } from 'cron';
 import { addListing, isListingSeen, type Listing } from './db';
 import { CarousellScraper } from './scrapers/carousell';
 import { DCFeverScraper } from './scrapers/dcfever';
-import { isOlderThanMonths } from './utils';
+import { isOlderThanDays } from './utils';
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const chatIdStr = process.env.TELEGRAM_CHAT_ID;
@@ -14,8 +14,8 @@ const scanInterval = parseInt(scanIntervalStr, 10) || 15;
 export const SEARCH_KEYWORD = process.env.SEARCH_KEYWORD || 'mac mini';
 export const MIN_PRICE = process.env.MIN_PRICE || '1000';
 export const MAX_PRICE = process.env.MAX_PRICE || '5000';
-const maxAgeStr = process.env.MAX_AGE_MONTHS || '3';
-const maxAgeMonths = parseInt(maxAgeStr, 10) || 3;
+const maxAgeStr = process.env.MAX_AGE_DAYS || '30';
+const maxAgeDays = parseInt(maxAgeStr, 10) || 30;
 
 if (!token || !chatIdStr) {
     console.error("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID in environment.");
@@ -40,7 +40,7 @@ async function sendNotification(listing: Listing) {
 
 *Title:* ${listing.title}
 *Price:* ${listing.price}
-${listing.postDate ? `*Posted:* ${listing.postDate}\n` : ''}
+${listing.postedAt ? `*Posted:* ${listing.postedAt}\n` : ''}
 [View Listing](${listing.url})
   `;
 
@@ -57,7 +57,7 @@ ${listing.postDate ? `*Posted:* ${listing.postDate}\n` : ''}
  */
 async function runJob() {
     console.log(`\n--- Starting Job at ${new Date().toISOString()} ---`);
-    console.log(`[Config] Keyword: '${SEARCH_KEYWORD}', Price: ${MIN_PRICE}-${MAX_PRICE}, Max Age: ${maxAgeMonths} months, Interval: ${scanInterval}m`);
+    console.log(`[Config] Keyword: '${SEARCH_KEYWORD}', Price: ${MIN_PRICE}-${MAX_PRICE}, Max Age: ${maxAgeDays} days, Interval: ${scanInterval}m`);
 
     for (const scraper of scrapers) {
         try {
@@ -67,7 +67,7 @@ async function runJob() {
             for (const listing of results) {
                 if (!isListingSeen(listing.id)) {
                     // Check if it's older than user-configured limit
-                    if (!isOlderThanMonths(listing.postDate, maxAgeMonths)) {
+                    if (!isOlderThanDays(listing.postedAt, maxAgeDays)) {
                         // This is a new listing and not too old
                         await sendNotification(listing);
                         newCount++;
@@ -75,7 +75,7 @@ async function runJob() {
                         // Slight delay between messages to avoid rate limiting
                         await new Promise(r => setTimeout(r, 1000));
                     } else {
-                        console.log(`[!] Skipping notification for ${listing.id} (Older than ${maxAgeMonths} months: ${listing.postDate})`);
+                        console.log(`[!] Skipping notification for ${listing.id} (Older than ${maxAgeDays} days: ${listing.postedAt})`);
                     }
 
                     // Always add to DB so we don't process it again (even if we skipped notification)

@@ -1,35 +1,32 @@
 /**
  * Checks if a relative date string indicates the item is older than the configured months.
  */
-export function isOlderThanMonths(postDate: string | undefined, monthsLimit: number): boolean {
-    if (!postDate) return false;
+export function isOlderThanDays(postedAt: string | undefined, daysLimit: number): boolean {
+    if (!postedAt) return false;
 
-    // Extract the absolute YYYY-MM-DD prefix from our format (e.g. "2026-03-04 16:40 HKT")
-    const match = postDate.match(/^(\d{4}-\d{2}-\d{2})/);
-    if (!match) return false; // If we can't parse the date format cleanly, don't skip it
+    // postedAt is now expected to be an ISO 8601 string (or similar valid datetime)
+    const parsedDate = new Date(postedAt);
+    if (isNaN(parsedDate.getTime())) return false; // Invalid date format
 
-    const parsedDate = new Date(match[1] as string);
     const now = new Date();
-
     const diffTime = now.getTime() - parsedDate.getTime();
     const diffDays = diffTime / (1000 * 60 * 60 * 24);
 
-    // Approximate a month loosely as 30 days
-    return diffDays >= (monthsLimit * 30);
+    return diffDays >= daysLimit;
 }
 
 /**
  * Converts a relative date string (e.g. "362 日前", "5 days ago") to an absolute YYYY-MM-DD date string.
  */
-export function toAbsoluteDate(postDate?: string): string {
-    if (!postDate) return 'Unknown Date';
+export function toAbsoluteDate(postDate?: string): string | undefined {
+    if (!postDate) return undefined;
 
     const lowerDate = postDate.toLowerCase();
 
     let millisToSubtract = 0;
 
     const match = lowerDate.match(/(\d+)/);
-    if (!match) return postDate;
+    if (!match) return undefined;
 
     const amount = parseInt(match[1] as string, 10);
     let englishUnit = '';
@@ -50,34 +47,10 @@ export function toAbsoluteDate(postDate?: string): string {
         millisToSubtract = amount * 60 * 1000;
         englishUnit = amount === 1 ? 'minute' : 'minutes';
     } else {
-        return postDate; // Return original string if we can't parse it
+        return undefined; // Return original string if we can't parse it
     }
 
+    // Return true ISO string for timezone-aware processing
     const targetDate = new Date(Date.now() - millisToSubtract);
-
-    const options: Intl.DateTimeFormatOptions = {
-        timeZone: 'Asia/Hong_Kong',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-    };
-
-    // Use en-GB to get DD/MM/YYYY or similar, then extract parts
-    const formatter = new Intl.DateTimeFormat('en-US', options);
-    const parts = formatter.formatToParts(targetDate);
-    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00';
-
-    const year = getPart('year');
-    const month = getPart('month');
-    const day = getPart('day');
-    const hour = parseInt(getPart('hour'), 10) === 24 ? '00' : getPart('hour'); // handle 24:00 to 00:00
-    const minute = getPart('minute');
-
-    const absoluteStr = `${year}-${month}-${day} ${hour}:${minute} HKT`;
-    const englishRelative = `${amount} ${englishUnit} ago`;
-
-    return `${absoluteStr} (${englishRelative})`;
+    return targetDate.toISOString();
 }
