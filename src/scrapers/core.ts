@@ -7,11 +7,12 @@ import { type Listing } from '../db';
 chromium.use(stealth());
 
 /**
- * Interface that each scraper class will implement
+ * Interface that each scraper class will implement.
+ * Scrapers receive a Page (tab) instead of managing their own browser.
  */
 export interface Scraper {
     name: string;
-    search(keyword: string): Promise<Listing[]>;
+    search(keyword: string, page: Page): Promise<Listing[]>;
 }
 
 /**
@@ -30,14 +31,44 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
 }
 
 /**
+ * Launch a shared browser instance. Called once per job run.
+ */
+export async function launchBrowser(): Promise<Browser> {
+    const browser = await chromium.launch({
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu',
+            '--single-process'
+        ]
+    });
+    return browser;
+}
+
+/**
+ * Create a new page (tab) in the given browser with standard settings.
+ */
+export async function createPage(browser: Browser): Promise<Page> {
+    const context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        viewport: { width: 1280, height: 720 },
+        locale: 'en-US,en;q=0.9',
+    });
+    return await context.newPage();
+}
+
+/**
  * Safely close the browser with a timeout.
  * On ARM64 Linux, browser.close() can hang indefinitely.
- * We close all contexts first, then try browser.close() with a 10s timeout.
- * If it still hangs, we log and move on (the outer per-scraper timeout in runJob is the safety net).
  */
 export async function closeBrowser(browser: Browser, label: string): Promise<void> {
     try {
-        // Close all contexts first — this often helps the browser shut down cleanly
+        // Close all contexts first — helps the browser shut down cleanly
         for (const context of browser.contexts()) {
             await Promise.race([
                 context.close(),
@@ -60,30 +91,3 @@ export async function closeBrowser(browser: Browser, label: string): Promise<voi
         console.warn(`[${label}] browser.close() failed:`, err);
     }
 }
-
-export async function setupBrowser(): Promise<{ browser: Browser, page: Page }> {
-    // Always run headless for a VPS
-    const browser = await chromium.launch({
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu',
-            '--single-process'
-        ]
-    });
-
-    const context = await browser.newContext({
-        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        viewport: { width: 1280, height: 720 },
-        locale: 'en-US,en;q=0.9',
-    });
-
-    const page = await context.newPage();
-    return { browser, page };
-}
-
