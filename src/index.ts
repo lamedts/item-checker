@@ -115,7 +115,15 @@ async function runJob() {
     console.log(`[Config] Keyword: '${SEARCH_KEYWORD}', Price: ${MIN_PRICE}-${MAX_PRICE}, Max Age: ${maxAgeDays} days, Interval: ${scanIntervalMin}-${scanIntervalMax}m`);
 
     console.log(`[Browser] Launching browser...`);
-    const { browser, page } = await setupBrowser();
+    let browser: Awaited<ReturnType<typeof setupBrowser>>['browser'];
+    let page: Awaited<ReturnType<typeof setupBrowser>>['page'];
+    try {
+        ({ browser, page } = await setupBrowser());
+    } catch (err) {
+        console.error(`[Browser] Failed to launch browser:`, err);
+        console.log(`--- Job Aborted (browser launch failed) ---`);
+        return;
+    }
     console.log(`[Browser] Browser launched.`);
 
     try {
